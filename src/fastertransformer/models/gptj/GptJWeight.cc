@@ -41,13 +41,12 @@ GptJWeight<T>::GptJWeight(const int hidden_units,
     decoder_layer_weights.reserve(num_layer_);
     for (int l = 0; l < num_layer_; l++) {
         if (isValidLayerParallelId(l)) {
-            decoder_layer_weights.push_back(
-                GptJDecoderLayerWeight<T>(hidden_units_, inter_size_, tensor_para_size_, tensor_para_rank_));
+            decoder_layer_weights.emplace_back(hidden_units_, inter_size_, tensor_para_size_, tensor_para_rank_);
         }
         else {
             // Layer-parallelism: allocate empty layer because
             // this rank does not compute it:
-            decoder_layer_weights.push_back(GptJDecoderLayerWeight<T>(0, 0));
+            decoder_layer_weights.emplace_back(0, 0);
         }
     }
 
