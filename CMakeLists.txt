@@ -237,9 +237,6 @@ include_directories(
   ${COMMON_HEADER_DIRS}
 )
 
-# set path of mpi
-list(APPEND COMMON_LIB_DIRS /usr/local/mpi/lib)
-
 link_directories(
   ${COMMON_LIB_DIRS}
 )
