@@ -56,12 +56,12 @@ class TestFusedQKVMutiheadAttention(unittest.TestCase):
             self.run_attn(4, 128, head, 64, tf.float16)
 
     def test_attn_size_fp32(self):
-        for size in [32, 64, 96, 128, 160, 192, 224, 256]:
+        for size in [32, 64, 80, 96, 128, 160, 192, 224, 256]:
             tf.reset_default_graph()
             self.run_attn(4, 128, 12, size, tf.float32)
 
     def test_attn_size_fp16(self):
-        for size in [32, 64, 96, 128, 160, 192, 224, 256]:
+        for size in [32, 64, 80, 96, 128, 160, 192, 224, 256]:
             tf.reset_default_graph()
             self.run_attn(4, 128, 12, size, tf.float16)
 
@@ -70,7 +70,7 @@ class TestFusedQKVMutiheadAttention(unittest.TestCase):
         if data_type == tf.float16:
             threshold = 4e-3
         # Inputs: qkv_buf and k/v cache
-        # Do: update k/v cahce, and compute attention (Q*K, QK*V)
+        # Do: update k/v cache, and compute attention (Q*K, QK*V)
         # Output: attention result, new k/v cache
         # Notes: Only used for decoder, so seqlen of q is always 1.
         
