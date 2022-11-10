@@ -52,7 +52,4 @@ std::vector<size_t> convert_shape(torch::Tensor tensor);
 template<typename T>
 fastertransformer::Tensor convert_tensor(torch::Tensor tensor);
 
-template<typename T>
-fastertransformer::Tensor convert_tensor(torch::Tensor tensor, fastertransformer::MemoryType memory_type);
-
 }  // namespace torch_ext

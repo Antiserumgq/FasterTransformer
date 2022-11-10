@@ -28,7 +28,6 @@ target_link_libraries(GptJDecoder PUBLIC -lcudart cublasMMWrapper
                       layernorm_kernels
                       add_residual_kernels
                       GptJDecoderLayerWeight
-                      tensor
                       nccl_utils)
 
 add_library(GptJContextDecoder STATIC GptJContextDecoder.cc)
@@ -40,7 +39,6 @@ target_link_libraries(GptJContextDecoder PUBLIC -lcudart cublasMMWrapper
                       layernorm_kernels
                       add_residual_kernels
                       gpt_kernels
-                      tensor
                       nccl_utils)
 
 add_library(GptJWeight STATIC GptJWeight.cc)
@@ -59,5 +57,4 @@ target_link_libraries(GptJ PUBLIC -lcudart
                       DynamicDecodeLayer
                       BaseBeamSearchLayer
                       bert_preprocess_kernels
-                      tensor
                       GptJWeight)

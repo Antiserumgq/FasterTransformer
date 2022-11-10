@@ -12,17 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# $1: RUNNING the Huggingface in the benchmark or not
-# $2: model_size like t5-base, t5-3b. Useless when $3 is given
-# $3: model_path for t5 model. We can use the downloaded model directly,
-#     preventing wasting time to download model.
-
-if [ "$1" = 0 ]; then
-    IS_RUN_HF=0
-else
-    IS_RUN_HF=1
-fi
-
 if [ $FT_REPO_PATH ];then
 	echo "FT_REPO_PATH = $FT_REPO_PATH"
 else
@@ -32,13 +21,52 @@ fi
 
 export NVIDIA_TF32_OVERRIDE=0
 
-if [ "$2" != "" ]; then
-    model_size=$2
+for model_size in "t5-base";
+do
+if [ "$model_size" = "t5-small" ]; then
+    encoder_head_num=8
+    encoder_size_per_head=64
+    encoder_d_model=512
+    encoder_num_layer=6
+    encoder_inter_size=2048
+
+    decoder_head_num=8
+    decoder_size_per_head=64
+    decoder_d_model=512
+    decoder_num_layer=6
+    decoder_inter_size=2048
+    decoder_vocab_size=32128
+elif [ "$model_size" = "t5-base" ]; then
+    encoder_head_num=12
+    encoder_size_per_head=64
+    encoder_d_model=768
+    encoder_num_layer=12
+    encoder_inter_size=3072
+
+    decoder_head_num=12
+    decoder_size_per_head=64
+    decoder_d_model=768
+    decoder_num_layer=12
+    decoder_inter_size=3072
+    decoder_vocab_size=32128
+elif [ "$model_size" = "t5-3b" ]; then
+    encoder_head_num=32
+    encoder_size_per_head=128
+    encoder_d_model=1024
+    encoder_num_layer=24
+    encoder_inter_size=16384
+
+    decoder_head_num=32
+    decoder_size_per_head=128
+    decoder_d_model=1024
+    decoder_num_layer=24
+    decoder_inter_size=16384
+    decoder_vocab_size=32128
 else
-    model_size="t5-base"
+    echo "[ERROR] no model_size $model_size"
 fi
 
-for precision in fp16;
+for precision in fp32;
 do
 
 if [ "$precision" = "fp16" ]; then
@@ -66,14 +94,8 @@ if [ ! -f ${logdir} ] ; then
 fi
 
 all_log="${logdir}/all-log.log"
-
-if [ "$IS_RUN_HF" == "1" ]; then
-    echo -e "| Batch Size | ${decode_type} | Precision | Huggingface <br/> Throughput (token/sec) | FT Decoding <br/> Throughput (token/sec) | FT Decoding <br/> Speedup |" > $all_log
-    echo -e "|:----------:|:--------------:|:---------:|:----------------------------------------:|:----------------------------------------:|:-------------------------:|" >> $all_log
-else
-    echo -e "| Batch Size | ${decode_type} | Precision | FT Decoding <br/> Throughput (token/sec) |" > $all_log
-    echo -e "|:----------:|:--------------:|:---------:|:----------------------------------------:|" >> $all_log
-fi
+echo -e "| Batch Size | ${decode_type} | Precision | Huggingface <br/> Throughput (token/sec) | FT Decoding <br/> Throughput (token/sec) | FT Decoding <br/> Speedup |" > $all_log
+echo -e "|:----------:|:--------------:|:---------:|:----------------------------------------:|:----------------------------------------:|:-------------------------:|" >> $all_log
 
 cat /proc/cpuinfo > ${logdir}/cpuinfo.txt
 nvidia-smi > ${logdir}/gpuinfo.txt
@@ -86,11 +108,7 @@ do
         beam_width=$decode_value
         topk=0
         topp=0.0
-        if [ "$IS_RUN_HF" == "1" ]; then
-            test_time="01"
-        else
-            test_time="1"
-        fi
+        test_time="01"
     elif [ "$decode_type" = "sampling" ]; then
         beam_width=1
         if [[ $decode_value == +([[:digit:]]) ]]; then
@@ -100,11 +118,7 @@ do
             topk=0
             topp=$decode_value
         fi
-        if [ "$IS_RUN_HF" == "1" ]; then
-            test_time="23"
-        else
-            test_time="3"
-        fi
+        test_time="23"
     fi
 
     if [ -f "gemm_config.in" ] ; then
@@ -112,57 +126,35 @@ do
     fi
 
     tmp_log_th=${logdir}/batchsize-${batch_size}-beamwidth-${beam_width}-seq-128-${precision}-${decode_type}-${decode_value}-th-log.log
-    
-    if [ "$3" != "" ]; then
-        python ${FT_REPO_PATH}/examples/pytorch/t5/translate_example.py \
+    ./bin/t5_gemm ${batch_size} ${beam_width} 128 \
+                  ${encoder_d_model} ${encoder_head_num} ${encoder_size_per_head} ${encoder_inter_size} \
+                  ${decoder_d_model} ${decoder_head_num} ${decoder_size_per_head} ${decoder_inter_size} \
+                  ${decoder_vocab_size} ${precision_num} > ${logdir}/batchsize-${batch_size}-beamwidth-${beam_width}-seq-128-${precision}-th-log.gemm.log
+
+    python ${FT_REPO_PATH}/examples/pytorch/t5/translate_example.py \
             --batch_size ${batch_size} \
             --beam_width ${beam_width} \
             --max_seq_len 128 \
             --data_type ${precision} \
             --beam_search_diversity_rate 0.0 \
-            --model_path $3 \
-            --model "t5-base" \
+            --model ${model_size} \
             --sampling_topk ${topk} \
             --sampling_topp ${topp} \
-            --max_iteration 200 \
             --test_time ${test_time} 2>&1 | tee ${tmp_log_th}
-    else
-        python ${FT_REPO_PATH}/examples/pytorch/t5/translate_example.py \
-                --batch_size ${batch_size} \
-                --beam_width ${beam_width} \
-                --max_seq_len 128 \
-                --data_type ${precision} \
-                --beam_search_diversity_rate 0.0 \
-                --model ${model_size} \
-                --sampling_topk ${topk} \
-                --sampling_topp ${topp} \
-                --max_iteration 200 \
-                --test_time ${test_time} 2>&1 | tee ${tmp_log_th}
-    fi
-
-    if [ "$IS_RUN_HF" == "1" ]; then
-        ft_decoding_throughput=`tail -n 1 ${tmp_log_th} | awk '{print $19}'`
-        th_throughput=`tail -n 2 ${tmp_log_th} | head -n 1 | awk '{print $19}'`
-        ft_decoding_speedup=$(echo "scale=2; $ft_decoding_throughput / $th_throughput " | bc)
-
-        echo "" | awk -v th_throughput=$th_throughput \
-                            -v ft_decoding_throughput=$ft_decoding_throughput \
-                            -v ft_decoding_speedup=$ft_decoding_speedup -v batch_size=$batch_size -v decode_value="$decode_value" \
-                            -v precision_large=$precision_large \
-                            '{printf "| %3d | %4s | %s | %5d | %5d | %5.2f |\n", batch_size, decode_value,
-                            precision_large, th_throughput, ft_decoding_throughput, 
-                            ft_decoding_speedup }' >> $all_log
-    else
-        ft_decoding_throughput=`tail -n 1 ${tmp_log_th} | awk '{print $19}'`
-
-        echo "" | awk -v ft_decoding_throughput=$ft_decoding_throughput \
-                      -v batch_size=$batch_size -v decode_value="$decode_value" \
-                      -v precision_large=$precision_large \
-                      '{printf "| %3d | %4s | %s | %5d |\n", batch_size, decode_value,
-                      precision_large, ft_decoding_throughput}' >> $all_log
-    fi
+    ft_decoding_throughput=`tail -n 1 ${tmp_log_th} | awk '{print $16}'`
+    th_throughput=`tail -n 2 ${tmp_log_th} | head -n 1 | awk '{print $16}'`
+    ft_decoding_speedup=$(echo "scale=2; $ft_decoding_throughput / $th_throughput " | bc)
+    
+    echo "" | awk -v th_throughput=$th_throughput \
+                        -v ft_decoding_throughput=$ft_decoding_throughput \
+                        -v ft_decoding_speedup=$ft_decoding_speedup -v batch_size=$batch_size -v decode_value="$decode_value" \
+                        -v precision_large=$precision_large \
+                        '{printf "| %3d | %4s | %s | %5d | %5d | %5.2f |\n", batch_size, decode_value,
+                        precision_large, th_throughput, ft_decoding_throughput, 
+                        ft_decoding_speedup }' >> $all_log
 
 done # decode_value
 done # batch_size
 done # decode_type
 done # for precision
+done # for model_size

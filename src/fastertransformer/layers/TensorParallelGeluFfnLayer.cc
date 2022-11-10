@@ -19,16 +19,15 @@
 namespace fastertransformer {
 
 template<typename T>
-void TensorParallelGeluFfnLayer<T>::forward(std::vector<fastertransformer::Tensor>*       output_tensors,
+void TensorParallelGeluFfnLayer<T>::forward(std::vector<fastertransformer::Tensor>* output_tensors,
                                             const std::vector<fastertransformer::Tensor>* input_tensors,
-                                            const FfnWeight<T>*                           ffn_weights)
+                                            const FfnWeight<T>* ffn_weights)
 {
-    FT_LOG_DEBUG(__PRETTY_FUNCTION__);
-    const size_t token_num    = output_tensors->at(0).shape[0];
+    const size_t token_num = output_tensors->at(0).shape[0];
     const size_t hidden_units = output_tensors->at(0).shape[1];
 
     bool use_custom_all_reduce_kernel = false;
-    if (do_all_reduce_ && enable_custom_all_reduce_ && custom_all_reduce_comm_ != nullptr) {
+    if (enable_custom_all_reduce_ && custom_all_reduce_comm_ != nullptr) {
         use_custom_all_reduce_kernel =
             custom_all_reduce_comm_->swapInternalBuffer(output_tensors, token_num * hidden_units);
     }
@@ -36,7 +35,7 @@ void TensorParallelGeluFfnLayer<T>::forward(std::vector<fastertransformer::Tenso
     GeluFfnLayer<T>::forward(output_tensors, input_tensors, ffn_weights);
 
     T* ffn_out = (T*)(output_tensors->at(0).data);
-    if (do_all_reduce_ && tensor_para_.world_size_ > 1) {
+    if (tensor_para_.world_size_ > 1) {
         if (!use_custom_all_reduce_kernel) {
             ftNcclAllReduceSum(ffn_out, ffn_out, token_num * hidden_units, tensor_para_, GeluFfnLayer<T>::stream_);
         }
@@ -48,22 +47,20 @@ void TensorParallelGeluFfnLayer<T>::forward(std::vector<fastertransformer::Tenso
 }
 
 template<typename T>
-TensorParallelGeluFfnLayer<T>::TensorParallelGeluFfnLayer(size_t           max_batch_size,
-                                                          size_t           max_seq_len,
-                                                          size_t           head_num,
-                                                          size_t           size_per_head,
-                                                          size_t           inter_size,
-                                                          NcclParam        tensor_para,
-                                                          cudaStream_t     stream,
+TensorParallelGeluFfnLayer<T>::TensorParallelGeluFfnLayer(size_t max_batch_size,
+                                                          size_t max_seq_len,
+                                                          size_t head_num,
+                                                          size_t size_per_head,
+                                                          size_t inter_size,
+                                                          NcclParam tensor_para,
+                                                          cudaStream_t stream,
                                                           cublasMMWrapper* cublas_wrapper,
-                                                          IAllocator*      allocator,
-                                                          bool             do_all_reduce,
-                                                          bool             is_free_buffer_after_forward,
-                                                          bool             is_sparse,
-                                                          int              int8_mode,
-                                                          bool             use_gated_activation,
+                                                          IAllocator* allocator,
+                                                          bool is_free_buffer_after_forward,
+                                                          bool is_sparse,
+                                                          int int8_mode,
                                                           std::shared_ptr<AbstractCustomComm> custom_all_reduce_comm,
-                                                          int                                 enable_custom_all_reduce):
+                                                          int enable_custom_all_reduce):
     GeluFfnLayer<T>(max_batch_size,
                     max_seq_len,
                     head_num,
@@ -74,14 +71,11 @@ TensorParallelGeluFfnLayer<T>::TensorParallelGeluFfnLayer(size_t           max_b
                     allocator,
                     is_free_buffer_after_forward,
                     is_sparse,
-                    int8_mode,
-                    use_gated_activation),
+                    int8_mode),
     tensor_para_(tensor_para),
     custom_all_reduce_comm_(custom_all_reduce_comm),
-    enable_custom_all_reduce_(enable_custom_all_reduce),
-    do_all_reduce_(do_all_reduce)
+    enable_custom_all_reduce_(enable_custom_all_reduce)
 {
-    FT_LOG_DEBUG(__PRETTY_FUNCTION__);
     FT_CHECK(inter_size % tensor_para_.world_size_ == 0);
 }
 
@@ -90,8 +84,7 @@ TensorParallelGeluFfnLayer<T>::TensorParallelGeluFfnLayer(TensorParallelGeluFfnL
     GeluFfnLayer<T>(ffn_layer),
     tensor_para_(ffn_layer.tensor_para_),
     custom_all_reduce_comm_(ffn_layer.custom_all_reduce_comm_),
-    enable_custom_all_reduce_(ffn_layer.enable_custom_all_reduce_),
-    do_all_reduce_(ffn_layer.do_all_reduce_)
+    enable_custom_all_reduce_(ffn_layer.enable_custom_all_reduce_)
 {
 }
 

@@ -17,18 +17,12 @@ target_link_libraries(gpt_example_utils PUBLIC -lcudart)
 
 add_executable(multi_gpu_gpt_example multi_gpu_gpt_example.cc)
 target_link_libraries(multi_gpu_gpt_example PUBLIC -lcublas -lcublasLt -lcudart
-                      ParallelGpt nvtx_utils mpi_utils nccl_utils -lmpi_cxx gpt_example_utils)
+                            ParallelGpt nvtx_utils -lmpi -lmpi_cxx gpt_example_utils)
 
 add_executable(multi_gpu_gpt_async_example multi_gpu_gpt_async_example.cc)
-target_link_libraries(multi_gpu_gpt_async_example PUBLIC -lcublas -lcublasLt -lcudart -lmpi_cxx
-                            ParallelGpt nvtx_utils mpi_utils nccl_utils gpt_example_utils)
+target_link_libraries(multi_gpu_gpt_async_example PUBLIC -lcublas -lcublasLt -lcudart
+                            ParallelGpt nvtx_utils -lmpi -lmpi_cxx gpt_example_utils)
 
 add_executable(multi_gpu_gpt_triton_example multi_gpu_gpt_triton_example.cc)
 target_link_libraries(multi_gpu_gpt_triton_example PUBLIC -lcublas -lcublasLt -lcudart
-                            ParallelGptTritonBackend TransformerTritonBackend memory_utils
-                            custom_ar_comm mpi_utils nccl_utils -lmpi_cxx gpt_example_utils -lpthread)
-
-add_executable(multi_gpu_gpt_interactive_example multi_gpu_gpt_interactive_example.cc)
-target_link_libraries(multi_gpu_gpt_interactive_example PUBLIC -lcublas -lcublasLt -lcudart
-                            ParallelGpt nvtx_utils mpi_utils nccl_utils -lmpi_cxx gpt_example_utils)
-
+                            ParallelGptTritonBackend memory_utils custom_ar_comm -lmpi -lmpi_cxx gpt_example_utils -lpthread)

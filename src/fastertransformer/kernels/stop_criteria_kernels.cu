@@ -16,43 +16,41 @@
 
 #include "src/fastertransformer/kernels/stop_criteria_kernels.h"
 #include "src/fastertransformer/utils/cuda_utils.h"
-#include "src/fastertransformer/utils/memory_utils.h"
-#include "src/fastertransformer/kernels/reduce_kernel_utils.cuh"
 
 namespace fastertransformer {
 
 __global__ void stop_words_criterion(const int* output_ids,
                                      const int* parent_ids,
                                      const int* stop_words,
-                                     bool*      finished,
-                                     size_t     id_offset,
-                                     size_t     stop_words_len,
-                                     int        batch_size,
-                                     int        beam_width,
-                                     int        step)
+                                     bool* finished,
+                                     size_t id_offset,
+                                     size_t stop_words_len,
+                                     int batch_size,
+                                     int beam_width,
+                                     int step)
 {
-    const int id        = blockIdx.x * blockDim.x + threadIdx.x;
+    const int id = blockIdx.x * blockDim.x + threadIdx.x;
     const int batch_idx = blockIdx.y / beam_width;
-    const int beam_idx  = blockIdx.y % beam_width;
+    const int beam_idx = blockIdx.y % beam_width;
 
     const int* base_stop_words = stop_words + batch_idx * 2 * stop_words_len;
-    const int* base_offsets    = base_stop_words + stop_words_len;
+    const int* base_offsets = base_stop_words + stop_words_len;
 
     if (id >= stop_words_len || base_offsets[id] < 0) {
         return;
     }
 
-    const int item_end   = base_offsets[id];
+    const int item_end = base_offsets[id];
     const int item_start = (id > 0) ? base_offsets[id - 1] : 0;
-    const int item_size  = item_end - item_start;
+    const int item_size = item_end - item_start;
 
     /* The single-token case unconditionally bans the token */
     bool should_stop = false;
 
     /* Enough previously generated tokens to look for a match */
     if (step + 1 >= item_size) {
-        should_stop            = true;
-        int        parent_id   = beam_idx;
+        should_stop = true;
+        int parent_id = beam_idx;
         const bool gather_beam = beam_width > 1;
 
         for (int token_idx = item_size - 1; token_idx >= 0; token_idx--) {
@@ -80,80 +78,25 @@ __global__ void stop_words_criterion(const int* output_ids,
     }
 }
 
-void invokeStopWordsCriterion(const int*   output_ids,
-                              const int*   parent_ids,
-                              const int*   stop_words,
-                              bool*        finished,
-                              size_t       id_offset,
-                              size_t       stop_words_len,
-                              int          batch_size,
-                              int          beam_width,
-                              int          step,
+void invokeStopWordsCriterion(const int* output_ids,
+                              const int* parent_ids,
+                              const int* stop_words,
+                              bool* finished,
+                              size_t id_offset,
+                              size_t stop_words_len,
+                              int batch_size,
+                              int beam_width,
+                              int step,
                               cudaStream_t stream)
 {
-    FT_LOG_DEBUG("%s start", __PRETTY_FUNCTION__);
-    // Check if we have sampled a word from the stop_words list. If so, stop the sequence.
     dim3 block, grid;
     block.x = min(((stop_words_len + 32 - 1) / 32) * 32, 256UL);
-    grid.x  = (stop_words_len + block.x - 1) / block.x;
-    grid.y  = batch_size * beam_width;
+    grid.x = (stop_words_len + block.x - 1) / block.x;
+    grid.y = batch_size * beam_width;
 
     stop_words_criterion<<<grid, block, 0, stream>>>(
         output_ids, parent_ids, stop_words, finished, id_offset, stop_words_len, batch_size, beam_width, step);
     sync_check_cuda_error();
-}
-
-__global__ void length_criterion(bool*           finished,
-                                 bool*           should_stop,
-                                 int*            finished_sum,
-                                 const uint32_t* sequence_limit_length,
-                                 int             batch_size,
-                                 int             beam_width,
-                                 int             step)
-{
-    int thread_finished_count = 0;
-    for (int index = threadIdx.x; index < batch_size * beam_width; index += blockDim.x) {
-        const int batch_idx = index / beam_width;
-
-        finished[index] |= step >= sequence_limit_length[batch_idx];
-        thread_finished_count += finished[index] ? 1 : 0;
-    }
-    int block_finished_count = 0;
-    if (blockDim.x <= 32) {
-        block_finished_count = warpReduceSum(thread_finished_count);
-    }
-    else {
-        block_finished_count = blockReduceSum(thread_finished_count);
-    }
-    __syncthreads();
-
-    if (threadIdx.x == 0) {
-        finished_sum[0] = block_finished_count;
-    }
-}
-
-void invokeLengthCriterion(bool*           finished,
-                           bool*           should_stop,
-                           int*            finished_sum,
-                           const uint32_t* sequence_limit_length,
-                           int             batch_size,
-                           int             beam_width,
-                           int             step,
-                           cudaStream_t    stream)
-{
-    // Check if we have attained the sequence length limit. If so, stop the sequence.
-    // In addition, check if all sequences are stopped and return the result in should_stop
-    FT_LOG_DEBUG("%s start", __PRETTY_FUNCTION__);
-    dim3 block{min(512, uint32_t(batch_size * beam_width))};
-    dim3 grid{1};
-
-    length_criterion<<<grid, block, 0, stream>>>(
-        finished, should_stop, finished_sum, sequence_limit_length, batch_size, beam_width, step);
-    sync_check_cuda_error();
-
-    int h_finished_sum = 0;
-    cudaD2Hcpy(&h_finished_sum, finished_sum, 1);
-    *should_stop = h_finished_sum == batch_size * beam_width;
 }
 
 }  // namespace fastertransformer

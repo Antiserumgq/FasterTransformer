@@ -40,7 +40,7 @@ inline std::string fmtstr(const std::string& format, Args... args)
         throw std::runtime_error("Error during formatting.");
     }
     auto size = static_cast<size_t>(size_s);
-    auto buf  = std::make_unique<char[]>(size);
+    auto buf = std::make_unique<char[]>(size);
     std::snprintf(buf.get(), size, format.c_str(), args...);
 #if defined(_MSC_VER)
 #pragma warning(pop)
@@ -50,8 +50,7 @@ inline std::string fmtstr(const std::string& format, Args... args)
     return std::string(buf.get(), buf.get() + size - 1);  // We don't want the '\0' inside
 }
 
-template<typename T>
-inline std::string vec2str(std::vector<T> vec)
+inline std::string vec2str(std::vector<size_t> vec)
 {
     std::stringstream ss;
     ss << "(";

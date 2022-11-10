@@ -120,7 +120,3 @@ class SwinTransformerWeightTransposeQKVWeight(object):
         for idx, v in enumerate(self.weights):
             self.weights[idx] = v.half()
 
-    def to_bfloat16(self):
-        for idx, v in enumerate(self.weights):
-            self.weights[idx] = v.bfloat16()
-
